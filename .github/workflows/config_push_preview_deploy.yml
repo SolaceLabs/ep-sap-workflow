@@ -1,12 +1,8 @@
 # This workflow will be triggered on every merge on the main branch
-# Note : if an XML file is not present, the job is canceled
+# Note : if the metainfo.prop file is not present, the job is canceled
 
 # To get started, configure the following in your repos secrets https://docs.github.com/en/actions/security-guides/encrypted-secrets
 # SOLACE_CLOUD_TOKEN: Solace Cloud Token
-
-## Cloudhub Deployment Secrets
-# anypoint_platform_username: Anypoint Platform Username
-# anypoint_platform_password: Anypoint Platform Passsword
 
 name: Config Push Deploy
 on:
@@ -28,90 +24,30 @@ jobs:
         uses: tj-actions/changed-files@v40
         with:
           files: | 
-            src/main/mule/**.xml
+            metainfo.prop
       
-      - name: Read Mule XML content
-        id: mule_xml
+      - name: Read metainfo.prop content
+        id: metadata
         run: |
           for file in ${{ steps.changed-markdown-files.outputs.all_changed_files }}; do
-            echo 'xml<<EOF' >> $GITHUB_OUTPUT
+            echo 'meta<<EOF' >> $GITHUB_OUTPUT
             echo $(cat $file) >> $GITHUB_OUTPUT
             echo 'EOF' >> $GITHUB_OUTPUT
           done
       
-      - name: Extract Application Version ID from Mule config
-        if: ${{ steps.mule_xml.outputs.xml }}
+      - name: Extract Application Version ID from metainfo.prop
+        if: ${{ steps.metadata.outputs.meta }}
         uses: tmelliottjr/extract-regex-action@v1.4.0
         id: epApplicationVersionId
         with:
-          regex: '(?<=name=\"epApplicationVersionId\" value=\")(.*?)(?=\")' 
+          regex: '(?<=applicationVersionID=)(?!.*=).*' 
           flags: "gm"
-          input: ${{steps.mule_xml.outputs.xml}}
+          input: ${{steps.metadata.outputs.meta}}
 
-      - name: Deploy Application Version
+      - name: Promote Application Version
         if: ${{ steps.epApplicationVersionId.outputs.resultString }}
         uses: SolaceDev/solace-ep-config-push@v0.1.0
         with:
           SOLACE_CLOUD_TOKEN: ${{ secrets.SOLACE_CLOUD_TOKEN }}
           APPLICATION_VERSION_ID: ${{ steps.epApplicationVersionId.outputs.resultString }}
           EVENT_MESH_NAME: ${{ env.EVENT_MESH_NAME }}
-
-  build:
-      runs-on: ubuntu-latest
-      steps:
-      - name: Checkout this repo
-        uses: actions/checkout@v3
-      - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      - name: Set up JDK 1.8
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: 8
-      - name: Build with Maven
-        run: mvn -B package --file pom.xml
-      - name: Stamp artifact file name with commit hash
-        run: |
-          artifactName1=$(ls target/*.jar | head -1)
-          commitHash=$(git rev-parse --short "$GITHUB_SHA")
-          artifactName2=$(ls target/*.jar | head -1 | sed "s/.jar/-$commitHash.jar/g")
-          mv $artifactName1 $artifactName2
-      - name: Upload artifact 
-        uses: actions/upload-artifact@v3
-        with:
-            name: artifacts
-            path: target/*.jar
-          
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:    
-    - name: Checkout this repo
-      uses: actions/checkout@v3
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
-    - uses: actions/download-artifact@v3
-      with:
-        name: artifacts
-    - name: Deploy to Sandbox
-      env:
-        USERNAME: ${{ secrets.anypoint_platform_username }}
-        PASSWORD: ${{ secrets.anypoint_platform_password }}
-      run: |
-        artifactName=$(ls *.jar | head -1)
-        mvn deploy -DmuleDeploy \
-          -DskipMunitTests \
-          -Dmule.artifact=$artifactName \
-          -Danypoint.username="$USERNAME" \
-          -Danypoint.password="$PASSWORD" \
-          -Denv="Sandbox"
