@@ -1,5 +1,5 @@
-# Github Workflow configuration for mule
-This repo will have the github workflow needed to plan, provision, and deploy mule application using Event Portal, Event Broker, and cloudhub
+# Github Workflow configuration for SAP iFlow
+This repo will have the github workflow needed to plan, provision, and promote SAP iFlow application using Event Portal, Event Broker, and SAP IS
 
 ## Things to note
 - Make sure github actions is enabled in your repo
